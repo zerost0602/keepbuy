@@ -11,7 +11,8 @@ let db = {
     initialized: true
 };
 
-let firebaseRef = null; // Firebase 리스너 해제용 레퍼런스
+let supabaseClient = null; // Supabase 클라이언트 객체
+let supabaseSubscription = null; // 실시간 구독 채널 객체
 
 // 날짜 포맷팅용 헬퍼 함수
 function getRelativeDateString(daysOffset) {
@@ -96,7 +97,8 @@ const fridgeQuantity = document.getElementById('fridgeQuantity');
 const fridgeListEl = document.getElementById('fridgeList');
 
 // 설정 폼 요소
-const firebaseUrlInput = document.getElementById('firebaseUrlInput');
+const supabaseUrlInput = document.getElementById('supabaseUrlInput');
+const supabaseKeyInput = document.getElementById('supabaseKeyInput');
 const familyIdInput = document.getElementById('familyIdInput');
 const saveSyncBtn = document.getElementById('saveSyncBtn');
 const disconnectSyncBtn = document.getElementById('disconnectSyncBtn');
@@ -111,12 +113,17 @@ const disconnectTelegramBtn = document.getElementById('disconnectTelegramBtn');
 function initApp() {
     // URL 파라미터 확인 및 자동 저장 (다른 기기 공유 용도)
     const urlParams = new URLSearchParams(window.location.search);
-    const urlFirebaseUrl = urlParams.get('firebaseUrl');
+    const urlSupabaseUrl = urlParams.get('supabaseUrl');
+    const urlSupabaseKey = urlParams.get('supabaseKey');
     const urlFamilyId = urlParams.get('familyId');
     
     let hasChanged = false;
-    if (urlFirebaseUrl) {
-        localStorage.setItem('fridge_firebase_url', urlFirebaseUrl);
+    if (urlSupabaseUrl) {
+        localStorage.setItem('fridge_supabase_url', urlSupabaseUrl);
+        hasChanged = true;
+    }
+    if (urlSupabaseKey) {
+        localStorage.setItem('fridge_supabase_key', urlSupabaseKey);
         hasChanged = true;
     }
     if (urlFamilyId) {
@@ -137,29 +144,26 @@ function initApp() {
 }
 
 function toggleFamilyIdVisibility() {
-    const url = firebaseUrlInput.value.trim();
-    const isDefault = !url || url.includes('refrigerator-dashboard-c308d-default-rtdb.firebaseio.com');
+    const url = supabaseUrlInput.value.trim();
+    const key = supabaseKeyInput.value.trim();
+    const hasSync = !!(url && key);
     
     const familyIdGroup = familyIdInput.closest('.form-group');
     const shareLinkBtnRow = shareLinkBtn.closest('.button-row');
     
     if (familyIdGroup) {
-        familyIdGroup.style.display = isDefault ? 'flex' : 'none';
+        familyIdGroup.style.display = hasSync ? 'flex' : 'none';
     }
     if (shareLinkBtnRow) {
-        shareLinkBtnRow.style.display = isDefault ? 'block' : 'none';
+        shareLinkBtnRow.style.display = hasSync ? 'block' : 'none';
     }
 }
 
 // 4. 데이터 저장/로드 및 동기화 제어 로직
 function loadData() {
-    let firebaseUrl = localStorage.getItem('fridge_firebase_url');
-    
-    // 사용자의 구글 Firebase 실시간 DB 주소를 기본 주소로 지정합니다.
-    if (!firebaseUrl) {
-        firebaseUrl = 'https://refrigerator-dashboard-c308d-default-rtdb.firebaseio.com/';
-        localStorage.setItem('fridge_firebase_url', firebaseUrl);
-    }
+    let supabaseUrl = localStorage.getItem('fridge_supabase_url') || '';
+    let supabaseKey = localStorage.getItem('fridge_supabase_key') || '';
+    let familyId = localStorage.getItem('fridge_family_id') || '';
     
     // 1단계: 로컬 캐시에서 데이터를 즉시 로드하여 렌더링 (블랭크 화면 방지)
     const localDbStr = localStorage.getItem('fridge_db');
@@ -179,9 +183,8 @@ function loadData() {
     renderShoppingList();
     renderFridgeList();
     
-    firebaseUrlInput.value = firebaseUrl || '';
-    
-    const familyId = localStorage.getItem('fridge_family_id') || '';
+    supabaseUrlInput.value = supabaseUrl;
+    supabaseKeyInput.value = supabaseKey;
     familyIdInput.value = familyId;
 
     toggleFamilyIdVisibility();
@@ -198,70 +201,103 @@ function loadData() {
         disconnectTelegramBtn.style.display = 'none';
     }
 
-    // 기존 Firebase 리스너가 있다면 정리
-    if (firebaseRef) {
-        firebaseRef.off();
-        firebaseRef = null;
+    // 기존 Supabase 구독 해제
+    if (supabaseSubscription) {
+        supabaseSubscription.unsubscribe();
+        supabaseSubscription = null;
     }
 
-    if (firebaseUrl) {
+    if (supabaseUrl && supabaseKey) {
         updateSyncStatus(true, "Connecting...");
         
         try {
-            // Firebase 앱 초기화
-            if (firebase.apps.length === 0) {
-                firebase.initializeApp({ databaseURL: firebaseUrl });
+            // Supabase 클라이언트 초기화
+            supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+            
+            if (!familyId) {
+                familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem('fridge_family_id', familyId);
+                familyIdInput.value = familyId;
             }
             
-            // 공유 경로 설정: 기본 Firebase 사용 시 기기별/가족별 유니크 경로를 설정하여 데이터 꼬임 방지
-            let dbPath = '/';
-            if (firebaseUrl.includes('refrigerator-dashboard-c308d-default-rtdb.firebaseio.com')) {
-                let familyId = localStorage.getItem('fridge_family_id');
-                if (!familyId) {
-                    familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
-                    localStorage.setItem('fridge_family_id', familyId);
-                }
-                dbPath = 'families/' + familyId;
-            }
+            const currentFamilyId = familyId;
             
-            firebaseRef = firebase.database().ref(dbPath);
-            firebaseRef.on('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
-                    db = {
-                        shoppingList: data.shoppingList || [],
-                        refrigerator: data.refrigerator || [],
-                        lastAlertDate: data.lastAlertDate || "",
-                        initialized: data.initialized || true
-                    };
-                    // 로컬 캐시 갱신
-                    localStorage.setItem('fridge_db', JSON.stringify(db));
+            // 1) 최초 데이터 로드
+            supabaseClient
+                .from('keepbuy_data')
+                .select('data')
+                .eq('family_id', currentFamilyId)
+                .maybeSingle()
+                .then(({ data, error }) => {
+                    if (error) {
+                        console.error("Supabase 로드 실패:", error);
+                        updateSyncStatus(false, "Sync Error");
+                        return;
+                    }
                     
-                    renderShoppingList();
-                    renderFridgeList();
-                    updateSyncStatus(true, "Cloud");
-                    
-                    // 데이터 로드 시에도 즉시 9시 경과 체크 및 오늘 알림 미발송 시 알림 트리거
-                    checkExpirationAlarms();
-                } else {
-                    // Firebase DB가 비어있는 경우 로컬 캐시 데이터로 세팅하여 업로드
-                    firebaseRef.set(db);
-                    updateSyncStatus(true, "Cloud");
-                }
-            }, (error) => {
-                console.error("Firebase 로딩 실패:", error);
-                updateSyncStatus(false, "Sync Error");
-            });
+                    if (data && data.data) {
+                        db = {
+                            shoppingList: data.data.shoppingList || [],
+                            refrigerator: data.data.refrigerator || [],
+                            lastAlertDate: data.data.lastAlertDate || "",
+                            initialized: data.data.initialized || true
+                        };
+                        localStorage.setItem('fridge_db', JSON.stringify(db));
+                        
+                        renderShoppingList();
+                        renderFridgeList();
+                        updateSyncStatus(true, "Cloud");
+                        
+                        // 즉시 유통기한 알람 가동 여부 확인
+                        checkExpirationAlarms();
+                    } else {
+                        // DB에 데이터가 없으면 로컬 데이터로 초기화 (upsert)
+                        persistData();
+                        updateSyncStatus(true, "Cloud");
+                    }
+                })
+                .catch(err => {
+                    console.error("Supabase 연결 실패:", err);
+                    updateSyncStatus(false, "Sync Error");
+                });
+                
+            // 2) 실시간 데이터 변경 구독
+            supabaseSubscription = supabaseClient
+                .channel('schema-db-changes')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'keepbuy_data',
+                        filter: `family_id=eq.${currentFamilyId}`
+                    },
+                    (payload) => {
+                        console.log('실시간 데이터 변화 수신:', payload);
+                        if (payload.new && payload.new.data) {
+                            db = {
+                                shoppingList: payload.new.data.shoppingList || [],
+                                refrigerator: payload.new.data.refrigerator || [],
+                                lastAlertDate: payload.new.data.lastAlertDate || "",
+                                initialized: payload.new.data.initialized || true
+                            };
+                            localStorage.setItem('fridge_db', JSON.stringify(db));
+                            renderShoppingList();
+                            renderFridgeList();
+                            checkExpirationAlarms();
+                        }
+                    }
+                )
+                .subscribe();
             
             disconnectSyncBtn.style.display = 'block';
         } catch (e) {
-            console.error("Firebase 초기화 에러:", e);
+            console.error("Supabase 초기화 에러:", e);
             updateSyncStatus(false, "URL Error");
         }
     } else {
         updateSyncStatus(false, "Local");
         disconnectSyncBtn.style.display = 'none';
-        // 로컬 모드에서도 경고 체크 진행
         checkExpirationAlarms();
     }
 }
@@ -294,33 +330,38 @@ function persistData() {
     localStorage.setItem('fridge_db', JSON.stringify(db));
     
     // 로컬 모드 시 즉각적인 렌더링 보장
-    const firebaseUrl = localStorage.getItem('fridge_firebase_url');
-    if (!firebaseUrl || firebase.apps.length === 0) {
+    const supabaseUrl = localStorage.getItem('fridge_supabase_url');
+    const supabaseKey = localStorage.getItem('fridge_supabase_key');
+    if (!supabaseUrl || !supabaseKey || !supabaseClient) {
         renderShoppingList();
         renderFridgeList();
         return;
     }
     
-    // 2단계: Firebase 비동기 클라우드 동기화
-    try {
-        let dbPath = '/';
-        if (firebaseUrl.includes('refrigerator-dashboard-c308d-default-rtdb.firebaseio.com')) {
-            let familyId = localStorage.getItem('fridge_family_id');
-            if (!familyId) {
-                familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
-                localStorage.setItem('fridge_family_id', familyId);
-            }
-            dbPath = 'families/' + familyId;
-        }
-        
-        firebase.database().ref(dbPath).set(db)
-            .then(() => console.log("Firebase 동기화 완료"))
-            .catch(err => {
-                console.error("Firebase 전송 실패. 로컬 데이터는 보존됩니다.", err);
-            });
-    } catch (e) {
-        console.error("Firebase 전송 에러:", e);
+    // 2단계: Supabase 비동기 클라우드 동기화 (upsert)
+    let familyId = localStorage.getItem('fridge_family_id');
+    if (!familyId) {
+        familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('fridge_family_id', familyId);
     }
+    
+    supabaseClient
+        .from('keepbuy_data')
+        .upsert({
+            family_id: familyId,
+            data: db,
+            updated_at: new Date().toISOString()
+        })
+        .then(({ error }) => {
+            if (error) {
+                console.error("Supabase 동기화 실패:", error);
+            } else {
+                console.log("Supabase 동기화 완료");
+            }
+        })
+        .catch(err => {
+            console.error("Supabase 전송 에러:", err);
+        });
 }
 
 // 텔레그램 알림 발송 공통 함수
@@ -935,13 +976,20 @@ editFridgeForm.addEventListener('submit', (e) => {
 
 // 11. 동기화 및 텔레그램 알림 설정 제어 로직
 saveSyncBtn.addEventListener('click', () => {
-    const url = firebaseUrlInput.value.trim();
+    const url = supabaseUrlInput.value.trim();
+    const key = supabaseKeyInput.value.trim();
     let familyId = familyIdInput.value.trim();
     
     if (url) {
-        localStorage.setItem('fridge_firebase_url', url);
+        localStorage.setItem('fridge_supabase_url', url);
     } else {
-        localStorage.removeItem('fridge_firebase_url');
+        localStorage.removeItem('fridge_supabase_url');
+    }
+    
+    if (key) {
+        localStorage.setItem('fridge_supabase_key', key);
+    } else {
+        localStorage.removeItem('fridge_supabase_key');
     }
     
     if (familyId) {
@@ -957,15 +1005,18 @@ saveSyncBtn.addEventListener('click', () => {
 });
 
 disconnectSyncBtn.addEventListener('click', () => {
-    localStorage.removeItem('fridge_firebase_url');
+    localStorage.removeItem('fridge_supabase_url');
+    localStorage.removeItem('fridge_supabase_key');
     localStorage.removeItem('fridge_family_id');
-    firebaseUrlInput.value = '';
+    supabaseUrlInput.value = '';
+    supabaseKeyInput.value = '';
     familyIdInput.value = '';
     settingsModal.classList.remove('active');
     loadData();
 });
 
-firebaseUrlInput.addEventListener('input', toggleFamilyIdVisibility);
+supabaseUrlInput.addEventListener('input', toggleFamilyIdVisibility);
+supabaseKeyInput.addEventListener('input', toggleFamilyIdVisibility);
 
 saveTelegramBtn.addEventListener('click', () => {
     const token = telegramTokenInput.value.trim();
@@ -994,7 +1045,8 @@ disconnectTelegramBtn.addEventListener('click', () => {
 });
 
 shareLinkBtn.addEventListener('click', () => {
-    const firebaseUrl = localStorage.getItem('fridge_firebase_url') || 'https://refrigerator-dashboard-c308d-default-rtdb.firebaseio.com/';
+    const supabaseUrl = localStorage.getItem('fridge_supabase_url') || '';
+    const supabaseKey = localStorage.getItem('fridge_supabase_key') || '';
     let familyId = localStorage.getItem('fridge_family_id');
     if (!familyId) {
         familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
@@ -1002,7 +1054,7 @@ shareLinkBtn.addEventListener('click', () => {
     }
     
     // Generate absolute share link
-    const shareUrl = `${window.location.origin}${window.location.pathname}?firebaseUrl=${encodeURIComponent(firebaseUrl)}&familyId=${encodeURIComponent(familyId)}`;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?supabaseUrl=${encodeURIComponent(supabaseUrl)}&supabaseKey=${encodeURIComponent(supabaseKey)}&familyId=${encodeURIComponent(familyId)}`;
     
     navigator.clipboard.writeText(shareUrl)
         .then(() => {

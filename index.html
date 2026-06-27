@@ -10,9 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     
-    <!-- Firebase SDK (Compat version for clean serverless browser usage) -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <!-- Supabase JS Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <!-- Background glow elements for premium modern design -->
@@ -191,11 +190,15 @@
                         <h4>실시간 클라우드 동기화</h4>
                     </div>
                     <div class="sync-settings">
-                        <p class="section-desc">구글 Firebase Realtime Database와 연동하여 가족 스마트폰 간에 데이터를 실시간으로 동기화합니다.</p>
+                        <p class="section-desc">Supabase 데이터베이스와 연동하여 가족 스마트폰 간에 데이터를 실시간으로 동기화합니다.</p>
                         
                         <div class="form-group">
-                            <label for="firebaseUrlInput">Firebase Database URL</label>
-                            <input type="url" id="firebaseUrlInput" placeholder="https://[프로젝트].firebaseio.com/" autocomplete="off">
+                            <label for="supabaseUrlInput">Supabase Project URL</label>
+                            <input type="url" id="supabaseUrlInput" placeholder="https://your-project.supabase.co" autocomplete="off">
+                        </div>
+                        <div class="form-group" style="margin-top: 12px;">
+                            <label for="supabaseKeyInput">Supabase Anon Key</label>
+                            <input type="text" id="supabaseKeyInput" placeholder="eyJhbGciOiJIUzI1Ni..." autocomplete="off">
                         </div>
                         <div class="form-group" style="margin-top: 12px; margin-bottom: 12px;">
                             <label for="familyIdInput">가족 식별 ID (Family ID)</label>
@@ -242,20 +245,30 @@
                         <details class="help-details" style="margin-top: 16px;">
                             <summary>동기화 & 알림 설정 방법 안내</summary>
                             <ol class="help-list">
-                                <li><strong>나만의 무료 Firebase DB 개설 순서</strong>:<br>
-                                    1. <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer">Firebase 콘솔</a>에 구글 로그인 후 <b>프로젝트 추가</b>를 누릅니다.<br>
-                                    2. 프로젝트 이름을 설정하고 (애널리틱스 비활성화 추천), 프로젝트 만들기 완료를 대기합니다.<br>
-                                    3. 왼쪽 빌드(Build) 메뉴에서 <b>Realtime Database</b>를 선택하고 <b>데이터베이스 만들기</b>를 누릅니다.<br>
-                                    4. 위치는 임의 지정(예: 미국)하고 다음을 누른 뒤, 테스트 모드를 선택하고 활성화를 누릅니다.<br>
-                                    5. 생성된 데이터베이스 상단의 <b>규칙(Rules)</b> 탭으로 이동하여 아래 코드로 교체한 뒤 <b>게시(Publish)</b>를 누릅니다:<br>
-                                    <pre style="background: rgba(0,0,0,0.4); padding: 6px; border-radius: 6px; font-size: 8px; color: #a5b4fc; overflow-x: auto; margin-top: 4px;">
-{
-  "rules": {
-    ".read": true,
-    ".write": true
-  }
-}</pre>
-                                    6. 다시 <b>데이터(Data)</b> 탭으로 돌아와 상단의 링크 주소(예: <code>https://...firebaseio.com/</code>)를 복사하여 <b>Firebase Database URL</b> 칸에 넣고 저장하면 완료됩니다! (이 경우 방 번호 없이 가족끼리 100% 동일 화면을 완전히 공유합니다.)
+                                <li><strong>나만의 무료 Supabase DB 개설 순서</strong>:<br>
+                                    1. <a href="https://supabase.com/" target="_blank" rel="noopener noreferrer">Supabase 홈페이지</a>에 접속하여 깃허브 또는 구글 계정으로 로그인합니다.<br>
+                                    2. <b>New Project</b>를 누르고 이름(예: <code>keepbuy</code>), 데이터베이스 비밀번호를 설정한 뒤 프로젝트를 생성합니다.<br>
+                                    3. 프로젝트 생성 완료 후 왼쪽 메뉴에서 <b>SQL Editor</b>를 클릭하고 <b>New Query</b>를 누릅니다.<br>
+                                    4. 아래의 SQL 쿼리 코드를 복사해 붙여넣고 우측 하단 <b>Run</b> 버튼을 실행합니다:<br>
+                                    <pre style="background: rgba(0,0,0,0.4); padding: 6px; border-radius: 6px; font-size: 8px; color: #a5b4fc; overflow-x: auto; margin-top: 4px; max-height: 120px;">
+-- 1. 테이블 생성
+create table keepbuy_data (
+  family_id text primary key,
+  data jsonb not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 2. RLS 활성화 및 누구나 읽고 쓸 수 있는 익명 권한 정책 부여
+alter table keepbuy_data enable row level security;
+create policy "Allow select" on keepbuy_data for select using (true);
+create policy "Allow insert" on keepbuy_data for insert with check (true);
+create policy "Allow update" on keepbuy_data for update using (true);
+create policy "Allow delete" on keepbuy_data for delete using (true);
+
+-- 3. 실시간 동기화(Realtime) 활성화
+alter publication supabase_realtime add table keepbuy_data;</pre>
+                                    5. 왼쪽 아래 <b>Project Settings (톱니바퀴) ➔ API</b> 메뉴로 이동합니다.<br>
+                                    6. <b>Project URL</b> 주소와 <b>Project API keys (anon public)</b> 키 값을 각각 복사하여 앱 설정창의 Supabase URL 및 Anon Key 칸에 입력하고 저장하면 연동이 즉시 완료됩니다!
                                 </li>
                                 <li><strong>Telegram 알림 설정</strong>:<br>
                                     - 텔레그램에서 <code>@BotFather</code>를 통해 봇 생성 후 고유 <strong>토큰</strong> 획득.<br>
