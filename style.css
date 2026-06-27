@@ -1,0 +1,910 @@
+/* ==========================================
+   KeepBuy - 모바일 최적화 장보기 및 냉장고 리스트
+   디자인: 프리미엄 다크 글래스모피즘 테마
+========================================== */
+
+/* 1. 디자인 시스템 토큰 & 초기화 */
+:root {
+    --bg-main: #07090e;
+    --bg-second: #0f131c;
+    --panel-bg: rgba(17, 22, 37, 0.7);
+    --panel-border: rgba(255, 255, 255, 0.06);
+    --panel-border-hover: rgba(255, 255, 255, 0.12);
+    
+    --text-primary: #f3f4f6;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+
+    --color-primary: #6366f1;     /* 인디고 블루 */
+    --color-accent: #8b5cf6;      /* 퍼플 */
+    --color-expired: #ef4444;     /* 네온 레드 */
+    --color-warning: #f59e0b;     /* 오렌지 */
+    --color-safe: #10b981;        /* 에메랄드 그린 */
+    
+    --color-primary-glass: rgba(99, 102, 241, 0.12);
+    
+    --font-main: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-heading: 'Outfit', var(--font-main);
+    
+    --shadow-md: 0 10px 20px -5px rgba(0, 0, 0, 0.3), 0 4px 8px -2px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+    
+    --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent; /* 모바일 터치 피드백 잔상 제거 */
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: var(--font-main);
+    height: 100vh;
+    height: 100dvh; /* 모바일 다이내믹 뷰포트 대응 */
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    justify-content: center;
+}
+
+/* 2. 백그라운드 디자인 (오라 글루 효과) */
+.bg-glow {
+    position: absolute;
+    width: 350px;
+    height: 350px;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: 0;
+    opacity: 0.2;
+    pointer-events: none;
+}
+
+.bg-glow-1 {
+    background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%);
+    top: -50px;
+    left: -50px;
+}
+
+.bg-glow-2 {
+    background: radial-gradient(circle, var(--color-accent) 0%, transparent 70%);
+    bottom: -50px;
+    right: -50px;
+}
+
+/* 3. 모바일 레이아웃 구조 */
+.app-container {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 480px; /* 데스크톱 브라우저에서 볼 때 중앙 정렬 */
+    height: 100%;
+    padding: 16px;
+    background: radial-gradient(ellipse at top, #0d1222 0%, var(--bg-main) 100%);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+    border-left: 1px solid rgba(255, 255, 255, 0.02);
+    border-right: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+/* 헤더 영역 */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px 12px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.header-left, .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.app-title {
+    font-family: var(--font-heading);
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: #ffffff;
+}
+
+.accent-text {
+    background: linear-gradient(135deg, var(--color-primary) 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* 연결 상태 표시기 */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--panel-border);
+    border-radius: 50px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    position: relative;
+}
+
+.status-dot::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    animation: status-pulse 1.8s infinite;
+}
+
+.status-indicator.local .status-dot {
+    background-color: var(--color-primary);
+}
+.status-indicator.local .status-dot::after {
+    background-color: var(--color-primary);
+}
+
+.status-indicator.syncing .status-dot {
+    background-color: var(--color-safe);
+}
+.status-indicator.syncing .status-dot::after {
+    background-color: var(--color-safe);
+}
+
+@keyframes status-pulse {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* 콘텐츠 영역 */
+.dashboard-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin-top: 14px;
+    height: calc(100% - 60px);
+    overflow: hidden;
+}
+
+/* SPA 멀티페이지 제어 클래스 */
+.page-view {
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+}
+
+.page-view.active {
+    display: flex;
+}
+
+/* 4. 카드 디자인 (글래스모피즘) */
+.dashboard-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: var(--transition-smooth);
+}
+
+.dashboard-card:hover {
+    border-color: var(--panel-border-hover);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.card-header-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.card-header h2 {
+    font-family: var(--font-heading);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+}
+
+.header-icon {
+    color: var(--color-primary);
+}
+
+.action-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 공통 스크롤바 디자인 */
+.scrollable {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.scrollable::-webkit-scrollbar {
+    width: 4px;
+}
+
+.scrollable::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollable::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+}
+
+/* 5. 살 물건 추가 양식 카드 */
+.form-section {
+    flex-shrink: 0;
+}
+
+.quick-add-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.form-group label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding-left: 2px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.quick-add-form input {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #ffffff;
+    font-size: 13px;
+    outline: none;
+    transition: var(--transition-smooth);
+    width: 100%;
+}
+
+.quick-add-form input:focus {
+    border-color: var(--color-primary);
+    background: rgba(0, 0, 0, 0.35);
+}
+
+/* 6. 살 물건 목록 카드 */
+.list-section {
+    flex: 1;
+    min-height: 0; /* flex 자식 스크롤 활성화를 위한 필수 설정 */
+}
+
+.list-wrapper {
+    padding: 12px 14px 16px 14px;
+}
+
+.shopping-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 개별 리스트 아이템 */
+.shopping-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    transition: var(--transition-smooth);
+    cursor: pointer;
+    min-height: 48px;
+}
+
+.shopping-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+.shopping-item-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+}
+
+/* 터치 영역이 확장된 체크박스 */
+.custom-checkbox {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--text-muted);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-smooth);
+    flex-shrink: 0;
+}
+
+.custom-checkbox svg {
+    opacity: 0;
+    transform: scale(0.5);
+    transition: var(--transition-bounce);
+    color: #ffffff;
+}
+
+.shopping-item.checked .custom-checkbox {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.shopping-item.checked .custom-checkbox svg {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.shopping-item-name {
+    font-size: 14px;
+    font-weight: 500;
+    transition: var(--transition-smooth);
+    white-space: normal;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+}
+
+.shopping-item.checked {
+    opacity: 0.55;
+    background: rgba(255, 255, 255, 0.005);
+}
+
+.shopping-item.checked .shopping-item-name {
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+/* 수량 배지 */
+.shopping-item-quantity {
+    font-size: 10px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 7px;
+    border-radius: 50px;
+    margin-left: 6px;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    flex-shrink: 0;
+}
+
+.shopping-item.checked .shopping-item-quantity {
+    background: rgba(0, 0, 0, 0.1);
+    color: var(--text-muted);
+}
+
+/* 냉장고 D-day 디스플레이용 유통기한 배지 */
+.fridge-item-expiry {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2.5px 8px;
+    border-radius: 50px;
+    margin-left: 6px;
+    flex-shrink: 0;
+}
+
+.fridge-item-expiry.status-safe {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--color-safe);
+}
+
+.fridge-item-expiry.status-warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--color-warning);
+}
+
+.fridge-item-expiry.status-expired {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-expired);
+    animation: pulse-expired-expiry 2s infinite alternate;
+}
+
+@keyframes pulse-expired-expiry {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.06); }
+}
+
+/* 한 손 터치 조작이 편리한 큰 구매 링크 버튼 */
+.shopping-item-link-btn {
+    color: #c7d2fe;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: none;
+    margin-left: auto;
+    margin-right: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: var(--transition-smooth);
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.shopping-item-link-btn:active {
+    transform: scale(0.95);
+    background: var(--color-primary);
+    color: #ffffff;
+}
+
+.shopping-item.checked .shopping-item-link-btn {
+    opacity: 0.4;
+    pointer-events: none; /* 완료 시 링크 비활성화 */
+}
+
+/* 삭제 버튼 터치 크기 및 애니메이션 */
+.delete-item-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    padding: 8px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.delete-item-btn:active {
+    color: var(--color-expired);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.empty-state-text {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 40px 10px;
+    line-height: 1.5;
+}
+
+/* 7. 버튼 및 공통 컨트롤 */
+.primary-btn {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
+    border: none;
+    color: #ffffff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.primary-btn:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 13px;
+}
+
+.icon-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--panel-border);
+    color: var(--text-primary);
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.icon-btn:active {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.text-btn {
+    background: transparent;
+    border: none;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.secondary-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--panel-border);
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+.telegram-send-btn {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: 700;
+}
+
+.telegram-send-btn:active {
+    background: #0284c7;
+    color: #ffffff;
+    transform: scale(0.95);
+}
+
+.compact-btn {
+    padding: 6px 10px;
+}
+
+.success-color {
+    background: linear-gradient(135deg, var(--color-safe) 0%, #059669 100%) !important;
+}
+
+.success-color:active {
+    opacity: 0.9;
+}
+
+.delete-color {
+    color: rgba(239, 68, 68, 0.8) !important;
+    border-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+.delete-color:active {
+    background: rgba(239, 68, 68, 0.12) !important;
+    border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.inline-icon {
+    vertical-align: middle;
+}
+
+/* 8. 좌측 슬라이드 사이드바 (메뉴 드로어) */
+.drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(3px);
+    z-index: 10;
+    opacity: 0;
+    visibility: hidden;
+    transition: var(--transition-smooth);
+}
+
+.drawer-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.menu-drawer {
+    position: fixed;
+    top: 0;
+    left: -320px;
+    width: 320px;
+    height: 100vh;
+    height: 100dvh;
+    background: rgba(10, 13, 22, 0.96);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    z-index: 11;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+    transition: var(--transition-smooth);
+}
+
+.menu-drawer.active {
+    left: 0;
+}
+
+.drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.drawer-header h3 {
+    font-family: var(--font-heading);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.drawer-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 20px;
+    height: calc(100% - 66px);
+}
+
+/* 네비게이션 메뉴 버튼 그룹 */
+.drawer-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 16px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    transition: var(--transition-smooth);
+}
+
+.nav-item svg {
+    color: var(--text-secondary);
+    transition: var(--transition-smooth);
+}
+
+.nav-item:active, .nav-item.active {
+    background: rgba(99, 102, 241, 0.12);
+    color: #ffffff;
+    border-color: rgba(99, 102, 241, 0.25);
+}
+
+.nav-item:active svg, .nav-item.active svg {
+    color: var(--color-primary);
+}
+
+/* 메뉴 드로어 고정 하단 영역 */
+.drawer-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 16px;
+    margin-top: auto;
+}
+
+.settings-nav-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.settings-nav-item:active {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.drawer-section {
+    margin-bottom: 28px;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    color: var(--color-primary);
+}
+
+.section-title h4 {
+    font-family: var(--font-heading);
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.section-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+
+/* 아코디언 도움말 */
+.help-details {
+    margin-top: 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.help-details summary {
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text-secondary);
+    outline: none;
+}
+
+.help-details summary:hover {
+    color: #ffffff;
+}
+
+.help-list {
+    padding: 0 12px 12px 22px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.help-list a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.help-list a:hover {
+    text-decoration: underline;
+}
+
+/* 9. 설정 모달 창 (Settings Modal) 디자인 */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: var(--transition-smooth);
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    width: 90%;
+    max-width: 440px;
+    border-radius: 20px;
+    background: rgba(13, 18, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: var(--shadow-lg);
+    transform: scale(0.9);
+    transition: var(--transition-bounce);
+    overflow: hidden;
+}
+
+.modal-overlay.active .modal-content {
+    transform: scale(1);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.modal-header h3 {
+    font-family: var(--font-heading);
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-divider {
+    border: 0;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.05);
+    margin: 20px 0;
+}
+
+/* 10. 신규 재구매 및 연필 수정 버튼 스타일 */
+.reorder-btn {
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 8px;
+    color: #c7d2fe;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 10px;
+    cursor: pointer;
+    margin-left: auto;
+    margin-right: 6px;
+    transition: var(--transition-smooth);
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.reorder-btn:active {
+    background: var(--color-primary);
+    color: #ffffff;
+    transform: scale(0.95);
+}
+
+.edit-item-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    padding: 8px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.edit-item-btn:active {
+    color: var(--color-primary);
+    background: rgba(99, 102, 241, 0.1);
+}
