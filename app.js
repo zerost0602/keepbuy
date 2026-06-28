@@ -6,6 +6,7 @@
 // 1. 상태 및 상수 정의
 const SUPABASE_URL = "https://fpfxwvtuucfcybusivxs.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwZnh3dnR1dWNmY3lidXNpdnhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDk2NDQsImV4cCI6MjA5ODEyNTY0NH0.fVG8ol57obYy0LluwdsqJup3O-BRTzqI1n3CxD95viQ";
+const FAMILY_ID = "default_family"; // 통합 고유 방 키 (모든 기기가 이 키로 자동 연동됨)
 
 let db = {
     shoppingList: [],
@@ -91,10 +92,6 @@ const fridgeQuantity = document.getElementById('fridgeQuantity');
 const fridgeListEl = document.getElementById('fridgeList');
 
 // 설정 폼 요소
-const familyIdInput = document.getElementById('familyIdInput');
-const saveSyncBtn = document.getElementById('saveSyncBtn');
-const shareLinkBtn = document.getElementById('shareLinkBtn');
-
 const telegramTokenInput = document.getElementById('telegramTokenInput');
 const telegramChatIdInput = document.getElementById('telegramChatIdInput');
 const saveTelegramBtn = document.getElementById('saveTelegramBtn');
@@ -102,21 +99,6 @@ const disconnectTelegramBtn = document.getElementById('disconnectTelegramBtn');
 
 // 3. 앱 초기화
 function initApp() {
-    // URL 파라미터 확인 및 자동 저장 (다른 기기 공유 용도)
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlFamilyId = urlParams.get('familyId');
-    
-    let hasChanged = false;
-    if (urlFamilyId) {
-        localStorage.setItem('fridge_family_id', urlFamilyId);
-        hasChanged = true;
-    }
-    
-    if (hasChanged) {
-        // 브라우저 주소창을 깨끗하게 만들기 위해 파라미터 제거
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
     loadData();
     
     // 유통기한 스케줄러 가동 (매 60초마다 시간 확인하여 오전 9시 알람 전송)
@@ -127,7 +109,6 @@ function initApp() {
 // 4. 데이터 저장/로드 및 동기화 제어 로직
 function loadData() {
     isCloudLoaded = false; // 새로운 데이터 로딩 시작 시 완료 플래그 초기화
-    let familyId = localStorage.getItem('fridge_family_id') || '';
     
     // 1단계: 로컬 캐시에서 데이터를 즉시 로드하여 렌더링 (블랭크 화면 방지)
     const localDbStr = localStorage.getItem('fridge_db');
@@ -173,19 +154,11 @@ function loadData() {
         // Supabase 클라이언트 초기화
         supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         
-        if (!familyId) {
-            familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
-            localStorage.setItem('fridge_family_id', familyId);
-            familyIdInput.value = familyId;
-        }
-        
-        const currentFamilyId = familyId;
-        
         // 1) 최초 데이터 로드
         supabaseClient
             .from('keepbuy_data')
             .select('data')
-            .eq('family_id', currentFamilyId)
+            .eq('family_id', FAMILY_ID)
             .maybeSingle()
             .then(({ data, error }) => {
                 if (error) {
@@ -231,7 +204,7 @@ function loadData() {
                     event: '*',
                     schema: 'public',
                     table: 'keepbuy_data',
-                    filter: `family_id=eq.${currentFamilyId}`
+                    filter: `family_id=eq.${FAMILY_ID}`
                 },
                 (payload) => {
                     console.log('실시간 데이터 변화 수신:', payload);
@@ -293,16 +266,10 @@ function persistData() {
     }
     
     // 2단계: Supabase 비동기 클라우드 동기화 (upsert)
-    let familyId = localStorage.getItem('fridge_family_id');
-    if (!familyId) {
-        familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('fridge_family_id', familyId);
-    }
-    
     supabaseClient
         .from('keepbuy_data')
         .upsert({
-            family_id: familyId,
+            family_id: FAMILY_ID,
             data: db,
             updated_at: new Date().toISOString()
         })
@@ -928,22 +895,7 @@ editFridgeForm.addEventListener('submit', (e) => {
 });
 
 
-// 11. 동기화 및 텔레그램 알림 설정 제어 로직
-saveSyncBtn.addEventListener('click', () => {
-    let familyId = familyIdInput.value.trim();
-    
-    if (familyId) {
-        localStorage.setItem('fridge_family_id', familyId);
-    } else {
-        // 입력값이 비어있을 경우 고유 식별코드 자동 생성
-        familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('fridge_family_id', familyId);
-    }
-    
-    settingsModal.classList.remove('active');
-    loadData();
-});
-
+// 11. 텔레그램 알림 설정 제어 로직
 saveTelegramBtn.addEventListener('click', () => {
     const token = telegramTokenInput.value.trim();
     const chatId = telegramChatIdInput.value.trim();
@@ -968,26 +920,6 @@ disconnectTelegramBtn.addEventListener('click', () => {
     alert('텔레그램 알림 연동이 해제되었습니다.');
     settingsModal.classList.remove('active');
     loadData();
-});
-
-shareLinkBtn.addEventListener('click', () => {
-    let familyId = localStorage.getItem('fridge_family_id');
-    if (!familyId) {
-        familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('fridge_family_id', familyId);
-    }
-    
-    // Generate absolute share link
-    const shareUrl = `${window.location.origin}${window.location.pathname}?familyId=${encodeURIComponent(familyId)}`;
-    
-    navigator.clipboard.writeText(shareUrl)
-        .then(() => {
-            alert('가족 공유 링크가 클립보드에 복사되었습니다! 이 링크를 가족에게 전달하면 동일한 데이터 저장소를 공유하여 실시간으로 동기화됩니다.');
-        })
-        .catch(err => {
-            console.error('링크 복사 실패:', err);
-            alert('링크 복사에 실패했습니다. 다음 주소를 직접 복사해 전달해 주세요:\n' + shareUrl);
-        });
 });
 
 // 앱 기동!
