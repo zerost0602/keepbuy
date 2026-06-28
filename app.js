@@ -163,7 +163,7 @@ function loadData() {
             .then(({ data, error }) => {
                 if (error) {
                     console.error("Supabase 로드 실패:", error);
-                    updateSyncStatus(false, "Sync Error");
+                    updateSyncStatus(false, "Sync Error: " + error.message);
                     return;
                 }
                 
@@ -192,7 +192,7 @@ function loadData() {
             })
             .catch(err => {
                 console.error("Supabase 연결 실패:", err);
-                updateSyncStatus(false, "Sync Error");
+                updateSyncStatus(false, "Connection Error: " + err.message);
             });
             
         // 2) 실시간 데이터 변경 구독
@@ -240,16 +240,13 @@ function updateSyncStatus(isCloud, text) {
         if (text === "Connecting...") {
             syncStatus.classList.add('local');
             statusText.textContent = "Connecting...";
-        } else if (text === "Sync Error" || text === "URL Error") {
-            syncStatus.classList.add('local');
-            statusText.textContent = text;
         } else {
             syncStatus.classList.add('syncing');
             statusText.textContent = "Cloud Active";
         }
     } else {
         syncStatus.classList.add('local');
-        statusText.textContent = "Local Mode";
+        statusText.textContent = text || "Local Mode";
     }
 }
 
