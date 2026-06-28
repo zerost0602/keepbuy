@@ -190,23 +190,14 @@
                         <h4>실시간 클라우드 동기화</h4>
                     </div>
                     <div class="sync-settings">
-                        <p class="section-desc">Supabase 데이터베이스와 연동하여 가족 스마트폰 간에 데이터를 실시간으로 동기화합니다.</p>
+                        <p class="section-desc">가족 스마트폰 간에 데이터를 실시간으로 동기화합니다. 수파베이스 클라우드 데이터베이스가 내장되어 기본 적용됩니다.</p>
                         
-                        <div class="form-group">
-                            <label for="supabaseUrlInput">Supabase Project URL</label>
-                            <input type="url" id="supabaseUrlInput" placeholder="https://your-project.supabase.co" autocomplete="off">
-                        </div>
-                        <div class="form-group" style="margin-top: 12px;">
-                            <label for="supabaseKeyInput">Supabase Anon Key</label>
-                            <input type="text" id="supabaseKeyInput" placeholder="eyJhbGciOiJIUzI1Ni..." autocomplete="off">
-                        </div>
-                        <div class="form-group" style="margin-top: 12px; margin-bottom: 12px;">
+                        <div class="form-group" style="margin-bottom: 12px;">
                             <label for="familyIdInput">가족 식별 ID (Family ID)</label>
                             <input type="text" id="familyIdInput" placeholder="fam-..." autocomplete="off">
                         </div>
                         <div class="button-row">
-                            <button id="saveSyncBtn" class="primary-btn">연동 및 저장</button>
-                            <button id="disconnectSyncBtn" class="text-btn secondary-btn delete-color" style="display:none;">연동 해제</button>
+                            <button id="saveSyncBtn" class="primary-btn">가족 식별 ID 저장</button>
                         </div>
                         <div class="button-row" style="margin-top: 8px;">
                             <button id="shareLinkBtn" type="button" class="text-btn secondary-btn" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;">
@@ -245,30 +236,10 @@
                         <details class="help-details" style="margin-top: 16px;">
                             <summary>동기화 & 알림 설정 방법 안내</summary>
                             <ol class="help-list">
-                                <li><strong>나만의 무료 Supabase DB 개설 순서</strong>:<br>
-                                    1. <a href="https://supabase.com/" target="_blank" rel="noopener noreferrer">Supabase 홈페이지</a>에 접속하여 깃허브 또는 구글 계정으로 로그인합니다.<br>
-                                    2. <b>New Project</b>를 누르고 이름(예: <code>keepbuy</code>), 데이터베이스 비밀번호를 설정한 뒤 프로젝트를 생성합니다.<br>
-                                    3. 프로젝트 생성 완료 후 왼쪽 메뉴에서 <b>SQL Editor</b>를 클릭하고 <b>New Query</b>를 누릅니다.<br>
-                                    4. 아래의 SQL 쿼리 코드를 복사해 붙여넣고 우측 하단 <b>Run</b> 버튼을 실행합니다:<br>
-                                    <pre style="background: rgba(0,0,0,0.4); padding: 6px; border-radius: 6px; font-size: 8px; color: #a5b4fc; overflow-x: auto; margin-top: 4px; max-height: 120px;">
--- 1. 테이블 생성
-create table keepbuy_data (
-  family_id text primary key,
-  data jsonb not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- 2. RLS 활성화 및 누구나 읽고 쓸 수 있는 익명 권한 정책 부여
-alter table keepbuy_data enable row level security;
-create policy "Allow select" on keepbuy_data for select using (true);
-create policy "Allow insert" on keepbuy_data for insert with check (true);
-create policy "Allow update" on keepbuy_data for update using (true);
-create policy "Allow delete" on keepbuy_data for delete using (true);
-
--- 3. 실시간 동기화(Realtime) 활성화
-alter publication supabase_realtime add table keepbuy_data;</pre>
-                                    5. 왼쪽 아래 <b>Project Settings (톱니바퀴) ➔ API</b> 메뉴로 이동합니다.<br>
-                                    6. <b>Project URL</b> 주소와 <b>Project API keys (anon public)</b> 키 값을 각각 복사하여 앱 설정창의 Supabase URL 및 Anon Key 칸에 입력하고 저장하면 연동이 즉시 완료됩니다!
+                                <li><strong>실시간 가족 동기화 방법</strong>:<br>
+                                    1. <b>가족 식별 ID</b>는 본인 가족 전용의 유니크한 고유 식별 코드(방 번호)입니다.<br>
+                                    2. <b>[가족 공유 링크 복사하기]</b>를 누르면 연동 주소가 클립보드에 복사됩니다.<br>
+                                    3. 이 복사된 링크를 가족(부모님 등)에게 전달하여 터치해 접속하도록 하면 별도 설정 없이 <b>즉시 실시간 동기화가 완료</b>됩니다!
                                 </li>
                                 <li><strong>Telegram 알림 설정</strong>:<br>
                                     - 텔레그램에서 <code>@BotFather</code>를 통해 봇 생성 후 고유 <strong>토큰</strong> 획득.<br>

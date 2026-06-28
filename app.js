@@ -4,6 +4,9 @@
 // ==========================================
 
 // 1. 상태 및 상수 정의
+const SUPABASE_URL = "https://fpfxwvtuucfcybusivxs.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwZnh3dnR1dWNmY3lidXNpdnhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NDk2NDQsImV4cCI6MjA5ODEyNTY0NH0.fVG8ol57obYy0LluwdsqJup3O-BRTzqI1n3CxD95viQ";
+
 let db = {
     shoppingList: [],
     refrigerator: [],
@@ -97,11 +100,8 @@ const fridgeQuantity = document.getElementById('fridgeQuantity');
 const fridgeListEl = document.getElementById('fridgeList');
 
 // 설정 폼 요소
-const supabaseUrlInput = document.getElementById('supabaseUrlInput');
-const supabaseKeyInput = document.getElementById('supabaseKeyInput');
 const familyIdInput = document.getElementById('familyIdInput');
 const saveSyncBtn = document.getElementById('saveSyncBtn');
-const disconnectSyncBtn = document.getElementById('disconnectSyncBtn');
 const shareLinkBtn = document.getElementById('shareLinkBtn');
 
 const telegramTokenInput = document.getElementById('telegramTokenInput');
@@ -113,19 +113,9 @@ const disconnectTelegramBtn = document.getElementById('disconnectTelegramBtn');
 function initApp() {
     // URL 파라미터 확인 및 자동 저장 (다른 기기 공유 용도)
     const urlParams = new URLSearchParams(window.location.search);
-    const urlSupabaseUrl = urlParams.get('supabaseUrl');
-    const urlSupabaseKey = urlParams.get('supabaseKey');
     const urlFamilyId = urlParams.get('familyId');
     
     let hasChanged = false;
-    if (urlSupabaseUrl) {
-        localStorage.setItem('fridge_supabase_url', urlSupabaseUrl);
-        hasChanged = true;
-    }
-    if (urlSupabaseKey) {
-        localStorage.setItem('fridge_supabase_key', urlSupabaseKey);
-        hasChanged = true;
-    }
     if (urlFamilyId) {
         localStorage.setItem('fridge_family_id', urlFamilyId);
         hasChanged = true;
@@ -143,26 +133,8 @@ function initApp() {
     setInterval(checkExpirationAlarms, 60000);
 }
 
-function toggleFamilyIdVisibility() {
-    const url = supabaseUrlInput.value.trim();
-    const key = supabaseKeyInput.value.trim();
-    const hasSync = !!(url && key);
-    
-    const familyIdGroup = familyIdInput.closest('.form-group');
-    const shareLinkBtnRow = shareLinkBtn.closest('.button-row');
-    
-    if (familyIdGroup) {
-        familyIdGroup.style.display = hasSync ? 'flex' : 'none';
-    }
-    if (shareLinkBtnRow) {
-        shareLinkBtnRow.style.display = hasSync ? 'block' : 'none';
-    }
-}
-
 // 4. 데이터 저장/로드 및 동기화 제어 로직
 function loadData() {
-    let supabaseUrl = localStorage.getItem('fridge_supabase_url') || '';
-    let supabaseKey = localStorage.getItem('fridge_supabase_key') || '';
     let familyId = localStorage.getItem('fridge_family_id') || '';
     
     // 1단계: 로컬 캐시에서 데이터를 즉시 로드하여 렌더링 (블랭크 화면 방지)
@@ -183,11 +155,7 @@ function loadData() {
     renderShoppingList();
     renderFridgeList();
     
-    supabaseUrlInput.value = supabaseUrl;
-    supabaseKeyInput.value = supabaseKey;
     familyIdInput.value = familyId;
-
-    toggleFamilyIdVisibility();
 
     // 텔레그램 설정 로드
     const tgToken = localStorage.getItem('fridge_telegram_token') || '';
@@ -207,98 +175,91 @@ function loadData() {
         supabaseSubscription = null;
     }
 
-    if (supabaseUrl && supabaseKey) {
-        updateSyncStatus(true, "Connecting...");
+    updateSyncStatus(true, "Connecting...");
+    
+    try {
+        // Supabase 클라이언트 초기화
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         
-        try {
-            // Supabase 클라이언트 초기화
-            supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
-            
-            if (!familyId) {
-                familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
-                localStorage.setItem('fridge_family_id', familyId);
-                familyIdInput.value = familyId;
-            }
-            
-            const currentFamilyId = familyId;
-            
-            // 1) 최초 데이터 로드
-            supabaseClient
-                .from('keepbuy_data')
-                .select('data')
-                .eq('family_id', currentFamilyId)
-                .maybeSingle()
-                .then(({ data, error }) => {
-                    if (error) {
-                        console.error("Supabase 로드 실패:", error);
-                        updateSyncStatus(false, "Sync Error");
-                        return;
-                    }
+        if (!familyId) {
+            familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
+            localStorage.setItem('fridge_family_id', familyId);
+            familyIdInput.value = familyId;
+        }
+        
+        const currentFamilyId = familyId;
+        
+        // 1) 최초 데이터 로드
+        supabaseClient
+            .from('keepbuy_data')
+            .select('data')
+            .eq('family_id', currentFamilyId)
+            .maybeSingle()
+            .then(({ data, error }) => {
+                if (error) {
+                    console.error("Supabase 로드 실패:", error);
+                    updateSyncStatus(false, "Sync Error");
+                    return;
+                }
+                
+                if (data && data.data) {
+                    db = {
+                        shoppingList: data.data.shoppingList || [],
+                        refrigerator: data.data.refrigerator || [],
+                        lastAlertDate: data.data.lastAlertDate || "",
+                        initialized: data.data.initialized || true
+                    };
+                    localStorage.setItem('fridge_db', JSON.stringify(db));
                     
-                    if (data && data.data) {
+                    renderShoppingList();
+                    renderFridgeList();
+                    updateSyncStatus(true, "Cloud");
+                    
+                    // 즉시 유통기한 알람 가동 여부 확인
+                    checkExpirationAlarms();
+                } else {
+                    // DB에 데이터가 없으면 로컬 데이터로 초기화 (upsert)
+                    persistData();
+                    updateSyncStatus(true, "Cloud");
+                }
+            })
+            .catch(err => {
+                console.error("Supabase 연결 실패:", err);
+                updateSyncStatus(false, "Sync Error");
+            });
+            
+        // 2) 실시간 데이터 변경 구독
+        supabaseSubscription = supabaseClient
+            .channel('schema-db-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'keepbuy_data',
+                    filter: `family_id=eq.${currentFamilyId}`
+                },
+                (payload) => {
+                    console.log('실시간 데이터 변화 수신:', payload);
+                    if (payload.new && payload.new.data) {
                         db = {
-                            shoppingList: data.data.shoppingList || [],
-                            refrigerator: data.data.refrigerator || [],
-                            lastAlertDate: data.data.lastAlertDate || "",
-                            initialized: data.data.initialized || true
+                            shoppingList: payload.new.data.shoppingList || [],
+                            refrigerator: payload.new.data.refrigerator || [],
+                            lastAlertDate: payload.new.data.lastAlertDate || "",
+                            initialized: payload.new.data.initialized || true
                         };
                         localStorage.setItem('fridge_db', JSON.stringify(db));
-                        
                         renderShoppingList();
                         renderFridgeList();
-                        updateSyncStatus(true, "Cloud");
-                        
-                        // 즉시 유통기한 알람 가동 여부 확인
                         checkExpirationAlarms();
-                    } else {
-                        // DB에 데이터가 없으면 로컬 데이터로 초기화 (upsert)
-                        persistData();
-                        updateSyncStatus(true, "Cloud");
                     }
-                })
-                .catch(err => {
-                    console.error("Supabase 연결 실패:", err);
-                    updateSyncStatus(false, "Sync Error");
-                });
-                
-            // 2) 실시간 데이터 변경 구독
-            supabaseSubscription = supabaseClient
-                .channel('schema-db-changes')
-                .on(
-                    'postgres_changes',
-                    {
-                        event: '*',
-                        schema: 'public',
-                        table: 'keepbuy_data',
-                        filter: `family_id=eq.${currentFamilyId}`
-                    },
-                    (payload) => {
-                        console.log('실시간 데이터 변화 수신:', payload);
-                        if (payload.new && payload.new.data) {
-                            db = {
-                                shoppingList: payload.new.data.shoppingList || [],
-                                refrigerator: payload.new.data.refrigerator || [],
-                                lastAlertDate: payload.new.data.lastAlertDate || "",
-                                initialized: payload.new.data.initialized || true
-                            };
-                            localStorage.setItem('fridge_db', JSON.stringify(db));
-                            renderShoppingList();
-                            renderFridgeList();
-                            checkExpirationAlarms();
-                        }
-                    }
-                )
-                .subscribe();
+                }
+            )
+            .subscribe();
             
-            disconnectSyncBtn.style.display = 'block';
-        } catch (e) {
-            console.error("Supabase 초기화 에러:", e);
-            updateSyncStatus(false, "URL Error");
-        }
-    } else {
-        updateSyncStatus(false, "Local");
-        disconnectSyncBtn.style.display = 'none';
-        checkExpirationAlarms();
+    } catch (e) {
+        console.error("Supabase 초기화 에러:", e);
+        updateSyncStatus(false, "URL Error");
     }
 }
 
@@ -330,9 +291,7 @@ function persistData() {
     localStorage.setItem('fridge_db', JSON.stringify(db));
     
     // 로컬 모드 시 즉각적인 렌더링 보장
-    const supabaseUrl = localStorage.getItem('fridge_supabase_url');
-    const supabaseKey = localStorage.getItem('fridge_supabase_key');
-    if (!supabaseUrl || !supabaseKey || !supabaseClient) {
+    if (!supabaseClient) {
         renderShoppingList();
         renderFridgeList();
         return;
@@ -976,21 +935,7 @@ editFridgeForm.addEventListener('submit', (e) => {
 
 // 11. 동기화 및 텔레그램 알림 설정 제어 로직
 saveSyncBtn.addEventListener('click', () => {
-    const url = supabaseUrlInput.value.trim();
-    const key = supabaseKeyInput.value.trim();
     let familyId = familyIdInput.value.trim();
-    
-    if (url) {
-        localStorage.setItem('fridge_supabase_url', url);
-    } else {
-        localStorage.removeItem('fridge_supabase_url');
-    }
-    
-    if (key) {
-        localStorage.setItem('fridge_supabase_key', key);
-    } else {
-        localStorage.removeItem('fridge_supabase_key');
-    }
     
     if (familyId) {
         localStorage.setItem('fridge_family_id', familyId);
@@ -1003,20 +948,6 @@ saveSyncBtn.addEventListener('click', () => {
     settingsModal.classList.remove('active');
     loadData();
 });
-
-disconnectSyncBtn.addEventListener('click', () => {
-    localStorage.removeItem('fridge_supabase_url');
-    localStorage.removeItem('fridge_supabase_key');
-    localStorage.removeItem('fridge_family_id');
-    supabaseUrlInput.value = '';
-    supabaseKeyInput.value = '';
-    familyIdInput.value = '';
-    settingsModal.classList.remove('active');
-    loadData();
-});
-
-supabaseUrlInput.addEventListener('input', toggleFamilyIdVisibility);
-supabaseKeyInput.addEventListener('input', toggleFamilyIdVisibility);
 
 saveTelegramBtn.addEventListener('click', () => {
     const token = telegramTokenInput.value.trim();
@@ -1045,8 +976,6 @@ disconnectTelegramBtn.addEventListener('click', () => {
 });
 
 shareLinkBtn.addEventListener('click', () => {
-    const supabaseUrl = localStorage.getItem('fridge_supabase_url') || '';
-    const supabaseKey = localStorage.getItem('fridge_supabase_key') || '';
     let familyId = localStorage.getItem('fridge_family_id');
     if (!familyId) {
         familyId = 'fam-' + Math.random().toString(36).substring(2, 15);
@@ -1054,7 +983,7 @@ shareLinkBtn.addEventListener('click', () => {
     }
     
     // Generate absolute share link
-    const shareUrl = `${window.location.origin}${window.location.pathname}?supabaseUrl=${encodeURIComponent(supabaseUrl)}&supabaseKey=${encodeURIComponent(supabaseKey)}&familyId=${encodeURIComponent(familyId)}`;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?familyId=${encodeURIComponent(familyId)}`;
     
     navigator.clipboard.writeText(shareUrl)
         .then(() => {
