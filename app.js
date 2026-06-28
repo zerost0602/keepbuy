@@ -16,6 +16,7 @@ let db = {
 
 let supabaseClient = null; // Supabase 클라이언트 객체
 let supabaseSubscription = null; // 실시간 구독 채널 객체
+let isCloudLoaded = false; // 클라우드 데이터 로드 완료 플래그
 
 // 날짜 포맷팅용 헬퍼 함수
 function getRelativeDateString(daysOffset) {
@@ -24,20 +25,10 @@ function getRelativeDateString(daysOffset) {
     return d.toISOString().split('T')[0];
 }
 
-// 초기 예시 데이터 (아무 데이터도 없을 때 로드됨)
+// 초기 데이터 (빈 상태)
 const defaultData = {
-    shoppingList: [
-        { id: "shop-1717042500001", name: "유기농 달걀 15구", quantity: "1판", link: "https://www.coupang.com/", checked: false },
-        { id: "shop-1717042500002", name: "매일우유 1L", quantity: "2팩", link: "", checked: false },
-        { id: "shop-1717042500003", name: "생수 2L", quantity: "6개입", link: "https://www.coupang.com/", checked: true },
-        { id: "shop-1717042500004", name: "양상추", quantity: "1통", link: "", checked: false }
-    ],
-    refrigerator: [
-        { id: "fridge-1717042500001", name: "체다 슬라이스 치즈", expiryDate: getRelativeDateString(-2), quantity: "5장" },
-        { id: "fridge-1717042500002", name: "방울토마토", expiryDate: getRelativeDateString(0), quantity: "1봉지" },
-        { id: "fridge-1717042500003", name: "대파", expiryDate: getRelativeDateString(2), quantity: "1단" },
-        { id: "fridge-1717042500004", name: "사과", expiryDate: getRelativeDateString(10), quantity: "3개" }
-    ],
+    shoppingList: [],
+    refrigerator: [],
     lastAlertDate: "",
     initialized: true
 };
@@ -135,6 +126,7 @@ function initApp() {
 
 // 4. 데이터 저장/로드 및 동기화 제어 로직
 function loadData() {
+    isCloudLoaded = false; // 새로운 데이터 로딩 시작 시 완료 플래그 초기화
     let familyId = localStorage.getItem('fridge_family_id') || '';
     
     // 1단계: 로컬 캐시에서 데이터를 즉시 로드하여 렌더링 (블랭크 화면 방지)
@@ -201,6 +193,8 @@ function loadData() {
                     updateSyncStatus(false, "Sync Error");
                     return;
                 }
+                
+                isCloudLoaded = true; // 최초 로드 완료 설정
                 
                 if (data && data.data) {
                     db = {
@@ -290,10 +284,11 @@ function persistData() {
     // 1단계: 로컬 캐시에 즉시 저장
     localStorage.setItem('fridge_db', JSON.stringify(db));
     
-    // 로컬 모드 시 즉각적인 렌더링 보장
-    if (!supabaseClient) {
+    // 로컬 모드 혹은 최초 클라우드 로드 완료 전에는 즉각적인 화면 렌더링만 수행하고 업로드 보류
+    if (!supabaseClient || !isCloudLoaded) {
         renderShoppingList();
         renderFridgeList();
+        console.log("Supabase 미연동 혹은 초기 데이터 로드 중 - 클라우드 업로드 보류");
         return;
     }
     
