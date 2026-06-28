@@ -127,8 +127,6 @@ function loadData() {
     }
     renderShoppingList();
     renderFridgeList();
-    
-    familyIdInput.value = familyId;
 
     // 텔레그램 설정 로드
     const tgToken = localStorage.getItem('fridge_telegram_token') || '';
@@ -619,7 +617,6 @@ drawerOverlay.addEventListener('click', closeDrawer);
 // 설정 모달 열기/닫기
 openSettingsBtn.addEventListener('click', () => {
     settingsModal.classList.add('active');
-    toggleFamilyIdVisibility();
     closeDrawer();
 });
 
